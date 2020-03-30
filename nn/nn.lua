@@ -18,12 +18,12 @@ nn.activeports = {}
 local invDict={}
 
 local function doprint(text)
-  if(finished)
+  if(finished) then
     print(text)
   end
 end
 
-local function nn.loadData(location)
+function nn.loadData(location)
   local file=io.open(location,"r")
   if file == nil 
     return generateDict()
@@ -36,7 +36,7 @@ local function nn.loadData(location)
   return t
 end
 
-local function nn.saveData(data,location)
+function nn.saveData(data,location)
   file=io.open(location,"w")
   file:write(serial.serialize(data))
   file:close()
@@ -55,7 +55,7 @@ local function invertDict(d)
   return invd
 end
 
-local function nn.listenForNano()
+function nn.listenForNano()
   resp=nil
   local loop=1
   while resp==nil and loop<5 do
@@ -74,13 +74,13 @@ local function nn.listenForNano()
   return nil
 end
 
-local function nn.send(command, ...)
+function nn.send(command, ...)
   m.broadcast(1,"nanomachines",command,...)
   local resp = listenForNano()
   return resp
 end
 
-local function nn.clearActive()
+function nn.clearActive()
   local resp="ClearingInputs:"
   for i,v in pairs(activeports) do
     resp+="\nInput: "..i.." "..v.." off"
@@ -133,7 +133,7 @@ local function genDictRecurse(tmpDict,limit,ports,level)
   return tmpDict
 end
     
-local function nn.generateDict()
+function nn.generateDict()
   doprint(nn.clearActive())
   doprint("\nChecking combinations:")
   local tmpDict={}
@@ -142,7 +142,7 @@ local function nn.generateDict()
   return tmpDict
 end
 
-local function nn.handlePlayerInfo()
+function nn.handlePlayerInfo()
   local pinfo={}
   
   resp=send("getName")
@@ -172,7 +172,7 @@ local function nn.handlePlayerInfo()
   return pinfo
 end
 
-local function nn.switchInput(comnum)
+function nn.switchInput(comnum)
   local dictValue=dict[comnum]
   if dictValue ~= nil then
     comnum=dictValue
@@ -221,7 +221,7 @@ local function nn.switchInput(comnum)
   end})
 end
 
-local function nn.listActiveEffects()
+function nn.listActiveEffects()
   local resp = send("getActiveEffects")
   if(resp==nil) then
     return ""
@@ -247,7 +247,7 @@ local function nn.listActiveEffects()
   return false
 end
 
-local function nn.handleNanoInfo()
+function nn.handleNanoInfo()
   local nanoInfo={}
   local resp=send("getPowerState")
   nanoInfo.energy=resp[2]
@@ -267,7 +267,7 @@ local function nn.handleNanoInfo()
   return effects
 end
 
-local function nn.listEffects()
+function nn.listEffects()
   local effects=dict
   setmetatable(effects,{
     __tostring=function(effects)
@@ -283,7 +283,7 @@ local function nn.listEffects()
   return effects
 end
 
-local function nn.addEffect(input,Effect)
+function nn.addEffect(input,Effect)
   if(input==nil) then
     doprint("Add effect:")
     local input=nil
@@ -321,7 +321,7 @@ local function nn.addEffect(input,Effect)
   return false
 end
 
-local function nn.removeEffect(Effect)
+function nn.removeEffect(Effect)
   if(Effect==nil) then
     doprint("Remove effect:")
     while Effect == nil do
@@ -357,7 +357,7 @@ local function commands()
   "\n effect_name: enables Input linked to effect"
 end
 
-local function nn.init(port,dict)
+function nn.init(port,dict)
 
   doprint("Getting nanomachine data")
   resp=send("getTotalInputCount") or 1
