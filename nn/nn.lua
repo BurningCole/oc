@@ -26,18 +26,18 @@ end
 function nn.loadData(location)
   local file=io.open(location,"r")
   if file == nil then
-    return generateDict()
+    return nn.generateDict()
   end
   local t = file:read("*all")
   t = serial.unserialize(t)
   if t == nil or #t==0 then 
-    return generateDict() 
+    return nn.generateDict() 
   end
   return t
 end
 
 function nn.saveData(data,location)
-  file=io.open(location,"w")
+  local file=io.open(location,"w")
   file:write(serial.serialize(data))
   file:close()
 end
@@ -68,15 +68,22 @@ function nn.listenForNano()
       if loop>10 then break end
       return respdata
     else
-      doprint("Conn error; retrying")
+      doprint("Conn error")
+      return nil
     end
+    loop+=1
   end
   return nil
 end
 
 function nn.send(command, ...)
-  m.broadcast(1,"nanomachines",command,...)
-  local resp = listenForNano()
+  local resp=nil
+  local loop = 0
+  while resp==nil and loop<5 do
+    m.broadcast(1,"nanomachines",command,...)
+    local resp = nn.listenForNano()
+    loop+=1
+  end
   return resp
 end
 
@@ -137,8 +144,8 @@ function nn.generateDict()
   doprint(nn.clearActive())
   doprint("\nChecking combinations:")
   local tmpDict={}
-  tmpDict=genDictRecurse(tmpDict,maxinput,{},1)
-  savedata(tmpDict,dictfile)
+  tmpDict=genDictRecurse(tmpDict,nn.maxinput,{},1)
+  nn.saveData(tmpDict,dictFile)
   return tmpDict
 end
 
@@ -149,14 +156,14 @@ function nn.handlePlayerInfo()
   if resp[2]=="" then resp[2]="Unknown" end
   pinfo.name=resp[2]
   resp=nn.send("getAge")
-  pinfo.age=resp[2]
+  pinfo.age=tonumber(resp[2])
   resp=nn.send("getHealth")
-  pinfo.health=resp[2]
+  pinfo.health=tonumber(resp[2])
   resp=nn.send("getHunger")
-  pinfo.hunger=resp[2]
-  pinfo.saturation=resp[3]
+  pinfo.hunger=tonumber(resp[2])
+  pinfo.saturation=tonumber(resp[3])
   resp=nn.send("getExperience")
-  pinfo.xp=resp[2]
+  pinfo.xp=tonumber(resp[2])
   
   setmetatable(pinfo,{
     __tostring=function(pinfo)
@@ -249,7 +256,11 @@ end
 function nn.handleNanoInfo()
   local nanoInfo={}
   local resp=nn.send("getPowerState")
-  nanoInfo.energy=resp[2]
+  nanoInfo.energy=tonumber(resp[2])
+  nanoInfo.safeInputs=nn.safeInputs
+  nanoInfo.maxenergy=nn.maxenergy
+  nanoInfo.activeports=nn.activeports
+  nanoInfo.maxinput=nn.maxinput
   resp=nn.send("getActiveEffects")
   resp = resp[2]:gsub("([^{,}]+)","\"%1\"")
   nanobot.effects=serial.unserialize(resp)
@@ -259,11 +270,11 @@ function nn.handleNanoInfo()
       return "Nanobot information:"..
       "\n Energy: "..nanobot.energy.."/"..nanobot.maxenergy..
       "\n Effects: "..#(nanobot.effects)..
-      "\n Safe Inputs: "..#(nn.activeports).."/"..nanobot.safeInputs..
-      "\n Maximum Input: "..nn.maxinput
+      "\n Safe Inputs: "..#(nanobot.activeports).."/"..nanobot.safeInputs..
+      "\n Maximum Input: "..nanobot.maxinput
     end
   })
-  return effects
+  return nanoInfo
 end
 
 function nn.listEffects()
@@ -316,7 +327,7 @@ function nn.addEffect(input,Effect)
   end
   dict[Effect]=input
   invDict=invertDict(dict)
-  saveData(dict,dictFile)
+  nn.saveData(dict,dictFile)
   return false
 end
 
@@ -335,7 +346,7 @@ function nn.removeEffect(Effect)
   end
   dict[Effect]=nil
   invDict=invertDict(dict)
-  saveData(dict,dictFile)
+  nn.saveData(dict,dictFile)
   return false
 end
 
@@ -360,18 +371,18 @@ function nn.init(port,dict)
 
   doprint("Getting nanomachine data")
   resp=nn.send("getTotalInputCount") or 1
-  nn.maxinput=resp[2]
+  nn.maxinput=tonumber(resp[2])
   doprint("\tMaximum Input: "..resp[2])
   resp=nn.send("getSafeActiveInputs")
-  nn.safeInputs=resp[2]
+  nn.safeInputs=tonumber(resp[2])
   doprint("\tSafeInputs: "..resp[2])
   resp=nn.send("getPowerState")
-  nn.maxenergy=resp[3]
+  nn.maxenergy=tonumber(resp[3])
   doprint("\tMax Energy: "..resp[3])
 
   doprint("\nGetting active ports")
-  for i=1,maxinput,1 do
-    resp=nn.send("getInput"..i)
+  for i=1,nn.maxinput,1 do
+    resp=nn.send("getInput",i)
     if(resp[3]) then
       nn.activeports[#nn.activeports+1]=i
       doprint("Port: "..i.." on")
@@ -381,7 +392,7 @@ function nn.init(port,dict)
   end
   
   doprint("\nPreparing dictionary")
-  dict=loadData(dictFile)
+  dict=nn.loadData(dictFile)
   invDict=invertDict(dict)
 end
 
