@@ -25,7 +25,7 @@ end
 
 function nn.loadData(location)
   local file=io.open(location,"r")
-  if file == nil 
+  if file == nil then
     return generateDict()
   end
   local t = file:read("*all")
@@ -82,16 +82,16 @@ end
 
 function nn.clearActive()
   local resp="ClearingInputs:"
-  for i,v in pairs(activeports) do
-    resp+="\nInput: "..i.." "..v.." off"
-    send("setInput",v,false)
+  for i,v in pairs(nn.activeports) do
+    resp=resp.."\nInput: "..i.." "..v.." off"
+    nn.send("setInput",v,false)
   end
   active={}
   return resp
 end
 
 local function findEffect(tmpDict,code)
-    local resp = send("getActiveEffects")
+    local resp = nn.send("getActiveEffects")
     if resp[2]=="{}" or resp[2]=="" then
       return tmpDict
     end
@@ -121,12 +121,12 @@ local function genDictRecurse(tmpDict,limit,ports,level)
     else
       tbl[1]=j
       doprint("Checking "..serial.serialise(tbl).."..")
-      send("setInput",j,true)
+      nn.send("setInput",j,true)
       tmpDict=findEffect(tmpDict,tbl)
       if(level < safeInputs) then
         tmpDict=genDictRecurse(tmpDict,j-1,tbl,level+1)
       end
-      send("setInput",j,false)     
+      nn.send("setInput",j,false)     
     end
     end
   end
@@ -145,17 +145,17 @@ end
 function nn.handlePlayerInfo()
   local pinfo={}
   
-  resp=send("getName")
+  resp=nn.send("getName")
   if resp[2]=="" then resp[2]="Unknown" end
   pinfo.name=resp[2]
-  resp=send("getAge")
+  resp=nn.send("getAge")
   pinfo.age=resp[2]
-  resp=send("getHealth")
+  resp=nn.send("getHealth")
   pinfo.health=resp[2]
-  resp=send("getHunger")
+  resp=nn.send("getHunger")
   pinfo.hunger=resp[2]
   pinfo.saturation=resp[3]
-  resp=send("getExperience")
+  resp=nn.send("getExperience")
   pinfo.xp=resp[2]
   
   setmetatable(pinfo,{
@@ -185,8 +185,7 @@ function nn.switchInput(comnum)
       i="unknown"
     end
   end
-  for
-  local changes={added=comnum,removed=activeports}
+  local changes = {added=comnum,removed=nn.activeports}
   for k,v in pairs(changes.added) do
     for p,o in pairs(changes.removed) do
       if(v==o) then
@@ -195,34 +194,34 @@ function nn.switchInput(comnum)
       end
     end 
   end
-  if(#changes.added+#activeports>nn.safeInputs) then
+  if(#changes.added+#nn.activeports>nn.safeInputs) then
     for k,v in pairs(changes.remove) do
-      send("setInput",v,false)
-      for p,o in pairs(activeports) do
-        if(o==v) then table.remove(activeports,p) end
+      nn.send("setInput",v,false)
+      for p,o in pairs(nn.activeports) do
+        if(o==v) then table.remove(nn.activeports,p) end
       end
     end
   else
     changes.removed={}
   end
   for k,v in pairs(changes.added) do
-    send("setInput",v,true)
-    table.insert(activeports,v) 
+    nn.send("setInput",v,true)
+    table.insert(nn.activeports,v) 
   end
   return setmetatable(changes,{__tostring=function(changes)
     local resstring="Changes:"
     for _,v in pairs(changes.removed) do
-      resstring+="\n Input: "..v.." Off"
+      resstring=resstring.."\n Input: "..v.." Off"
     end
     for _,v in pairs(changes.added) do
-      resstring+="\n Input: "..v.." On"
+      resstring=resstring.."\n Input: "..v.." On"
     end
     return resstring
   end})
 end
 
 function nn.listActiveEffects()
-  local resp = send("getActiveEffects")
+  local resp = nn.send("getActiveEffects")
   if(resp==nil) then
     return ""
   end
@@ -236,11 +235,11 @@ function nn.listActiveEffects()
     __tostring=function(table)
       local tabledata=""
       for i=1,#resp do
-        tabledata=tabledata.."\n"..i .. ": " .. resp[i])
+        tabledata=tabledata.."\n"..i .. ": " .. resp[i]
       end
-      if(#resp==0){
+      if(#resp==0) then
         tabledata="\nnone"
-      }
+      end
       return "Active effects:"..tabledata
     end
   })
@@ -249,9 +248,9 @@ end
 
 function nn.handleNanoInfo()
   local nanoInfo={}
-  local resp=send("getPowerState")
+  local resp=nn.send("getPowerState")
   nanoInfo.energy=resp[2]
-  resp=send("getActiveEffects")
+  resp=nn.send("getActiveEffects")
   resp = resp[2]:gsub("([^{,}]+)","\"%1\"")
   nanobot.effects=serial.unserialize(resp)
   
@@ -275,7 +274,7 @@ function nn.listEffects()
       for i,v in pairs(effects) do
        i=serial.serialize(i)
         i=i:gsub("[{}]","")
-        effectsString+="\n"..k..": "..i
+        effectsString=effectsString.."\n"..k..": "..i
       end
       return "All effects:"..effectsString
     end
@@ -360,21 +359,21 @@ end
 function nn.init(port,dict)
 
   doprint("Getting nanomachine data")
-  resp=send("getTotalInputCount") or 1
+  resp=nn.send("getTotalInputCount") or 1
   nn.maxinput=resp[2]
   doprint("\tMaximum Input: "..resp[2])
-  resp=send("getSafeActiveInputs")
+  resp=nn.send("getSafeActiveInputs")
   nn.safeInputs=resp[2]
   doprint("\tSafeInputs: "..resp[2])
-  resp=send("getPowerState")
+  resp=nn.send("getPowerState")
   nn.maxenergy=resp[3]
-  doprint("\Max Energy: "..resp[3])
+  doprint("\tMax Energy: "..resp[3])
 
   doprint("\nGetting active ports")
   for i=1,maxinput,1 do
-    resp=send("getInput"..i)
+    resp=nn.send("getInput"..i)
     if(resp[3]) then
-      activeports[#activeports+1]=i
+      nn.activeports[#nn.activeports+1]=i
       doprint("Port: "..i.." on")
     elseif(i%5==0) then
       doprint(i.." Scanned")
