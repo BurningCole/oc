@@ -7,7 +7,7 @@ local nn={}
 
 m.setStrength(2);
 m.open(1)
-local dictFile="/usr/etc/nn/dict.txt"
+local dictFile="/nndict.txt"
 
 local args={...}
 local finished = (#args ~= 0)
@@ -56,22 +56,20 @@ local function invertDict(d)
 end
 
 function nn.listenForNano()
-  resp=nil
   local loop=1
-  while resp==nil and loop<5 do
+  while loop<5 do
     local respdata = {event.pull(2,"modem_message")}
     if respdata[6]=="nanomachines" then
       for i=1,6,1 do
         table.remove(respdata,1)
       end
-      loop = loop + 1
-      if loop>10 then break end
       return respdata
     else
-      doprint("Conn error")
-      return nil
+      loop = loop + 1
+      if(respdata=nil) then
+        doprint("Conn error")
+      end
     end
-    loop+=1
   end
   return nil
 end
@@ -79,10 +77,10 @@ end
 function nn.send(command, ...)
   local resp=nil
   local loop = 0
-  while resp==nil and loop<5 do
+  while resp==nil and loop<10 do
     m.broadcast(1,"nanomachines",command,...)
-    local resp = nn.listenForNano()
-    loop+=1
+    resp = nn.listenForNano()
+    loop=loop+1
   end
   return resp
 end
@@ -118,24 +116,17 @@ end
 local function genDictRecurse(tmpDict,limit,ports,level)
   local tbl={}
   for k,v in pairs(ports) do
-    tbl[k+1]=val
+    tbl[k+1]=v
   end
-  for j=0,limit,1 do
-    if(#ports~=0)then
-    if(0==j) then
-      doprint("Checking "..serial.serialise(ports).."..")
-      tmpDict=findEffect(tmpDict,ports)
-    else
-      tbl[1]=j
-      doprint("Checking "..serial.serialise(tbl).."..")
-      nn.send("setInput",j,true)
-      tmpDict=findEffect(tmpDict,tbl)
-      if(level < safeInputs) then
-        tmpDict=genDictRecurse(tmpDict,j-1,tbl,level+1)
-      end
-      nn.send("setInput",j,false)     
+  for j=1,limit,1 do
+    tbl[1]=j
+    doprint("Checking "..serial.serialize(tbl).."..")
+    nn.send("setInput",j,true)
+    tmpDict=findEffect(tmpDict,tbl)
+    if(level < nn.safeInputs) then
+      tmpDict=genDictRecurse(tmpDict,j-1,tbl,level+1)
     end
-    end
+    nn.send("setInput",j,false)
   end
   return tmpDict
 end
@@ -370,7 +361,7 @@ end
 function nn.init(port,dict)
 
   doprint("Getting nanomachine data")
-  resp=nn.send("getTotalInputCount") or 1
+  resp=nn.send("getTotalInputCount")
   nn.maxinput=tonumber(resp[2])
   doprint("\tMaximum Input: "..resp[2])
   resp=nn.send("getSafeActiveInputs")
