@@ -10,7 +10,7 @@ m.open(1)
 local dictFile="/nndict.txt"
 
 local args={...}
-local finished = (#args ~= 0)
+local finished = (#args == 0)
 
 nn.dict = {}
 nn.activeports = {}
@@ -18,7 +18,7 @@ nn.activeports = {}
 local invDict={}
 
 local function doprint(text)
-  if(finished) then
+  if(not finished) then
     print(text)
   end
 end
@@ -29,10 +29,10 @@ function nn.loadData(location)
     return nn.generateDict()
   end
   local t = file:read("*all")
-  t = serial.unserialize(t)
-  if t == nil or #t==0 then 
+  if t == nil or t=="" or t=="{}" then 
     return nn.generateDict() 
   end
+  t=serial.unserialize(t)
   return t
 end
 
@@ -40,6 +40,10 @@ function nn.saveData(data,location)
   local file=io.open(location,"w")
   file:write(serial.serialize(data))
   file:close()
+end
+
+local function copy(tbl)
+  return {table.unpack(tbl)}
 end
 
 local function invertDict(d)
@@ -66,7 +70,7 @@ function nn.listenForNano()
       return respdata
     else
       loop = loop + 1
-      if(respdata=nil) then
+      if(respdata==nil) then
         doprint("Conn error")
       end
     end
@@ -91,7 +95,7 @@ function nn.clearActive()
     resp=resp.."\nInput: "..i.." "..v.." off"
     nn.send("setInput",v,false)
   end
-  active={}
+  nn.activeports={}
   return resp
 end
 
@@ -105,8 +109,8 @@ local function findEffect(tmpDict,code)
     resp=resp:gsub("}","\"}")
     resp=serial.unserialize(resp)
     for i=1,#resp,1 do
-      if(not tmpDict[resp[i]]) then
-        tmpDict[resp[i]]=code
+      if tmpDict[resp[i]]==nil then
+        tmpDict[resp[i]]=copy(code)
         doprint("Found: "..resp[i].." <= "..serial.serialize(code))
       end
     end
@@ -158,7 +162,7 @@ function nn.handlePlayerInfo()
   
   setmetatable(pinfo,{
     __tostring=function(pinfo)
-      return "Player Information"..
+      return "Player Information\n"..
       pinfo.name..":"..
       "\n  Age:      ".. pinfo.age..
       "\n  Health:   "..pinfo.health..
@@ -174,26 +178,41 @@ function nn.switchInput(comnum)
   local dictValue=nn.dict[comnum]
   if dictValue ~= nil then
     comnum=dictValue
-  else 
-    i=invDict[comnum]
+  else
+    comnum="{"..comnum.."}"
+    local i=invDict[comnum]
+    comnum=serial.unserialize(comnum)
     if i~=nil then
       i=serial.serialize(invDict[comnum])
       i=i:gsub("[{}]","")
     else
       i="unknown"
     end
+    doprint("Effect/s: "..i)
   end
-  local changes = {added=comnum,removed=nn.activeports}
-  for k,v in pairs(changes.added) do
-    for p,o in pairs(changes.removed) do
-      if(v==o) then
-        table.remove(changes.added,k)
-        table.remove(changes.removed,p)
+  local changes = {added=copy(comnum),removed=copy(nn.activeports)}
+  for k=1,#changes.added do
+    local rem=true
+    while rem do
+      rem=false
+      v=changes.added[k]
+      for p=1,#changes.removed do
+        if(v==changes.removed[p]) then
+          table.remove(changes.added,k)
+          table.remove(changes.removed,p)
+          rem=true
+          break
+        end
       end
-    end 
+    end
   end
-  if(#changes.added+#nn.activeports>nn.safeInputs) then
-    for k,v in pairs(changes.remove) do
+  local doadd=#changes.added+#nn.activeports>nn.safeInputs
+  if(#changes.added==0) then
+    doadd=true
+    changes.removed=copy(comnum)
+  end
+  if(doadd) then
+    for k,v in pairs(changes.removed) do
       nn.send("setInput",v,false)
       for p,o in pairs(nn.activeports) do
         if(o==v) then table.remove(nn.activeports,p) end
@@ -224,7 +243,7 @@ function nn.listActiveEffects()
     return ""
   end
   if resp[2]=="" or resp[2]=="{}" then
-    resp=nil
+    resp={}
   else
     resp=resp[2]:gsub("([^{,}]+)","\"%1\"")
     resp=serial.unserialize(resp)
@@ -241,7 +260,7 @@ function nn.listActiveEffects()
       return "Active effects:"..tabledata
     end
   })
-  return false
+  return effects
 end
 
 function nn.handleNanoInfo()
@@ -254,7 +273,7 @@ function nn.handleNanoInfo()
   nanoInfo.maxinput=nn.maxinput
   resp=nn.send("getActiveEffects")
   resp = resp[2]:gsub("([^{,}]+)","\"%1\"")
-  nanobot.effects=serial.unserialize(resp)
+  nanoInfo.effects=serial.unserialize(resp)
   
   setmetatable(nanoInfo,{
     __tostring=function(nanobot)
@@ -276,7 +295,7 @@ function nn.listEffects()
       for i,v in pairs(effects) do
        i=serial.serialize(i)
         i=i:gsub("[{}]","")
-        effectsString=effectsString.."\n"..k..": "..i
+        effectsString=effectsString.."\n"..i..": "..serial.serialize(v)
       end
       return "All effects:"..effectsString
     end
@@ -287,12 +306,11 @@ end
 function nn.addEffect(input,Effect)
   if(input==nil) then
     doprint("Add effect:")
-    local input=nil
     while input==nil do
-      io.write("Insert Effect Input: ")
+      io.write("Insert Effect Input/s: ")
       input = io.read()
       if input == "q" then return false end
-      local exclusion =input:find("[^%n,]")
+      local exclusion =input:find("[^%d,]")
       if(nn.dict[input]) then 
         input=nn.dict[input] 
       elseif exclusion ~= nil then 
@@ -301,16 +319,17 @@ function nn.addEffect(input,Effect)
         input="{"..input.."}"
         input=serial.unserialize(input)
       end
-      
     end
   end
   if(Effect == nil) then
+    Effect=""
     while #Effect < 2 do
       io.write("Insert Effect Name: ")
       Effect = io.read()
       if Effect == "q" then return false end
-      if #Effect < 2 then doprint("Effect Name must be longer than 2 characters (q to quit)") end
-      if nn.dict[Effect]~= nil then
+      if #Effect < 2 then
+        doprint("Effect Name must be longer than 2 characters (q to quit)")
+      elseif nn.dict[Effect]~= nil then
         doprint("Effect name already used (q to quit)")
         Effect = ""
       end
@@ -319,7 +338,7 @@ function nn.addEffect(input,Effect)
   nn.dict[Effect]=input
   invDict=invertDict(nn.dict)
   nn.saveData(nn.dict,dictFile)
-  return false
+  return "Effect "..Effect.." added. Inputs: "..serial.serialize(input)
 end
 
 function nn.removeEffect(Effect)
@@ -338,7 +357,7 @@ function nn.removeEffect(Effect)
   nn.dict[Effect]=nil
   invDict=invertDict(nn.dict)
   nn.saveData(nn.dict,dictFile)
-  return false
+  return "Effect "..Effect.." removed"
 end
 
 local function commands()
@@ -359,7 +378,10 @@ local function commands()
 end
 
 function nn.init(port)
-
+  if port==nil then
+    port=1
+  end
+  nn.send("setResponsePort",port)
   doprint("Getting nanomachine data")
   resp=nn.send("getTotalInputCount")
   nn.maxinput=tonumber(resp[2])
@@ -403,14 +425,13 @@ local funcList = setmetatable({
   c = nn.clearActive, clear = nn.clearActive, none = nn.clearActive
 },
 {
-  __index = function(_,index)
-    local comnum=tonumber(command)
-    if comnum ~= nil then
-      switchInput(comnum)
-    elseif nn.dict[command] then
-      switchInput(command)
+  __index = function(_,command)
+    local exclusion=command:find("[^%d,]")
+    local res="Unknown command"
+    if exclusion == nil or nn.dict[command] then
+      res=nn.switchInput(command)
     end
-    return function() return false end
+    return function() return res end
   end
 }
 )
@@ -429,12 +450,14 @@ local function readNext()
 end
 
 if(finished==true) then
-  if(args[1]~="req") then
-    nn.init()
-    for i=1,#args do
-      print((funcList[args[i]])())
-    end
+  return nn
+end
+if(args[1]~="cmd") then
+  nn.init()
+  for i=1,#args do
+    print((funcList[args[i]])())
   end
+  finished=true
   return nn
 end
 nn.init()
