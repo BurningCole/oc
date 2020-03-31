@@ -171,7 +171,7 @@ function nn.handlePlayerInfo()
 end
 
 function nn.switchInput(comnum)
-  local dictValue=dict[comnum]
+  local dictValue=nn.dict[comnum]
   if dictValue ~= nil then
     comnum=dictValue
   else 
@@ -269,7 +269,7 @@ function nn.handleNanoInfo()
 end
 
 function nn.listEffects()
-  local effects=dict
+  local effects=nn.dict
   setmetatable(effects,{
     __tostring=function(effects)
       local effectsString=""
@@ -293,8 +293,8 @@ function nn.addEffect(input,Effect)
       input = io.read()
       if input == "q" then return false end
       local exclusion =input:find("[^%n,]")
-      if(dict[input]) then 
-        input=dict[input] 
+      if(nn.dict[input]) then 
+        input=nn.dict[input] 
       elseif exclusion ~= nil then 
         doprint("Effect Input must be number, existing element or number list (q to quit)")
       else
@@ -310,15 +310,15 @@ function nn.addEffect(input,Effect)
       Effect = io.read()
       if Effect == "q" then return false end
       if #Effect < 2 then doprint("Effect Name must be longer than 2 characters (q to quit)") end
-      if dict[Effect]~= nil then
+      if nn.dict[Effect]~= nil then
         doprint("Effect name already used (q to quit)")
         Effect = ""
       end
     end
   end
-  dict[Effect]=input
-  invDict=invertDict(dict)
-  nn.saveData(dict,dictFile)
+  nn.dict[Effect]=input
+  invDict=invertDict(nn.dict)
+  nn.saveData(nn.dict,dictFile)
   return false
 end
 
@@ -329,15 +329,15 @@ function nn.removeEffect(Effect)
       io.write("Insert Effect Name: ")
       Effect = io.read()
       if Effect == "q" then return nil end
-      if dict[Effect]== nil then
+      if nn.dict[Effect]== nil then
         doprint("Effect name not used (q to quit)")
         Effect = nil
       end
     end
   end
-  dict[Effect]=nil
-  invDict=invertDict(dict)
-  nn.saveData(dict,dictFile)
+  nn.dict[Effect]=nil
+  invDict=invertDict(nn.dict)
+  nn.saveData(nn.dict,dictFile)
   return false
 end
 
@@ -358,7 +358,7 @@ local function commands()
   "\n effect_name: enables Input linked to effect"
 end
 
-function nn.init(port,dict)
+function nn.init(port)
 
   doprint("Getting nanomachine data")
   resp=nn.send("getTotalInputCount")
@@ -383,8 +383,8 @@ function nn.init(port,dict)
   end
   
   doprint("\nPreparing dictionary")
-  dict=nn.loadData(dictFile)
-  invDict=invertDict(dict)
+  nn.dict=nn.loadData(dictFile)
+  invDict=invertDict(nn.dict)
 end
 
 local function q()
@@ -407,7 +407,7 @@ local funcList = setmetatable({
     local comnum=tonumber(command)
     if comnum ~= nil then
       switchInput(comnum)
-    elseif dict[command] then
+    elseif nn.dict[command] then
       switchInput(command)
     end
     return function() return false end
